@@ -100,12 +100,12 @@ pub fn input(mut s: S) -> Result<(String, S), Option<Error>> {
 }
 
 #[derive(Debug)]
-pub struct Expression {
+pub struct Line {
     pub command_name: String,
     pub inputs: Vec<String>,
 }
 
-pub fn expression(mut s: S) -> Result<(Expression, S), Option<Error>> {
+pub fn line(mut s: S) -> Result<(Line, S), Option<Error>> {
     let str_before_command_name = s;
     let command_name = match command_name(s) {
         None => match next(s) {
@@ -137,7 +137,7 @@ pub fn expression(mut s: S) -> Result<(Expression, S), Option<Error>> {
             Err(None) => {
                 inputs.shrink_to_fit();
                 return Ok((
-                    Expression {
+                    Line {
                         command_name,
                         inputs,
                     },
@@ -154,7 +154,7 @@ pub fn expression(mut s: S) -> Result<(Expression, S), Option<Error>> {
 
 #[derive(Debug)]
 pub struct Program {
-    pub expressions: Vec<Expression>,
+    pub lines: Vec<Line>,
 }
 
 #[derive(Debug)]
@@ -167,13 +167,13 @@ pub enum Error {
 
 pub fn program(src: &str) -> Result<Program, Error> {
     let mut s = S { src, index: 0 };
-    let mut expressions = Vec::new();
+    let mut lines = Vec::new();
     loop {
         s = skip_whitespace(s);
-        match expression(s) {
+        match line(s) {
             Err(Some(e)) => return Err(e),
             Err(None) => match next(s) {
-                None => return Ok(Program { expressions }),
+                None => return Ok(Program { lines }),
                 Some((c, new_s)) => {
                     if !"\n;".contains(c) {
                         return Err(Error::UnexpectedClosingParen { index: s.index });
@@ -181,8 +181,8 @@ pub fn program(src: &str) -> Result<Program, Error> {
                     s = new_s;
                 }
             },
-            Ok((expression, new_s)) => {
-                expressions.push(expression);
+            Ok((line, new_s)) => {
+                lines.push(line);
                 s = new_s;
             }
         }
