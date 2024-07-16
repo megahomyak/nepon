@@ -1,23 +1,51 @@
-/// Parser input
-#[derive(Clone, Copy)]
-pub struct S<'a> {
-    pub src: &'a str,
-    pub index: usize,
-}
+mod s {
+    /// Parser input
+    #[derive(Clone, Copy, Debug)]
+    pub struct S<'a> {
+        src: &'a str,
+        index: usize,
+    }
 
-#[rustfmt::skip]
-pub fn next(s: S) -> Option<(char, S)> {
-    s.src.get(s.index..)
-        .unwrap()
-        .chars()
-        .next()
-        .map(move |c| (c, S { index: s.index + c.len_utf8(), src: s.src}))
-}
+    impl<'a> From<&'a str> for S<'a> {
+        fn from(src: &'a str) -> Self {
+            Self { src, index: 0 }
+        }
+    }
 
-pub enum Char {
-    Escaped(char),
-    Regular(char),
+    pub fn row_col_line(s: S) -> (usize, usize, &str) {
+        let mut line_start_idx = 0;
+        let mut row = 1;
+        let mut col = 0;
+        let mut char_indices = s.src.char_indices();
+        let mut found = false;
+        for (i, c) in &mut char_indices {
+            if i == s.index {
+                found = true;
+            }
+            if c == '\n' {
+                if found {
+                    return (row, col, unsafe { s.src.get_unchecked(line_start_idx..i) });
+                } else {
+                    line_start_idx = i;
+                    col = 0;
+                    row += 1;
+                }
+            } else if !found {
+                col += 1;
+            }
+        }
+        (row, col, unsafe { s.src.get_unchecked(line_start_idx..) })
+    }
+
+    #[rustfmt::skip]
+    pub fn next(s: S) -> Option<(char, S)> {
+        unsafe { s.src.get_unchecked(s.index..) }
+            .chars()
+            .next()
+            .map(move |c| (c, S { index: s.index + c.len_utf8(), src: s.src}))
+    }
 }
+pub use s::*;
 
 pub fn skip_whitespace(mut s: S) -> S {
     while let Some((c, new_s)) = next(s) {
@@ -30,103 +58,122 @@ pub fn skip_whitespace(mut s: S) -> S {
 }
 
 /// [blah blah] (...)
-pub fn command_name(mut s: S) -> Option<(String, S)> {
-    let mut result = String::new();
+pub fn command_name(mut s: S) -> Option<(CommandName, S)> {
+    let mut content = String::new();
+    let beginning_pos = s;
     while let Some((c, new_s)) = next(s) {
         if "()\n;".contains(c) {
             break;
         }
-        result.push(c);
+        content.push(c);
         s = new_s;
     }
-    result = result.trim_end_matches(char::is_whitespace).to_owned();
-    if result.is_empty() {
+    content = content.trim_end_matches(char::is_whitespace).to_owned();
+    if content.is_empty() {
         None
     } else {
-        result.shrink_to_fit();
-        Some((result, s))
+        content.shrink_to_fit();
+        Some((
+            CommandName {
+                content,
+                beginning_pos,
+            },
+            s,
+        ))
     }
 }
 
 /// blah blah [(...)]
-pub fn input(mut s: S) -> Result<(String, S), Option<Error>> {
-    let mut result = String::new();
+pub fn input(mut s: S) -> Result<(Input, S), Option<Error>> {
+    let mut content = String::new();
     let mut paren_count = 1;
-    let str_at_beginning = s;
+    let opening_paren_pos = s;
     match next(s) {
         Some(('(', new_s)) => s = new_s,
         _ => return Err(None),
     }
     loop {
-        let str_at_current_char = s;
+        let esc_char_pos = s;
         match next(s) {
             Some((c, new_s)) => {
                 s = new_s;
                 match c {
                     '(' => {
                         paren_count += 1;
-                        result.push('(');
+                        content.push('(');
                     }
                     ')' => {
                         paren_count -= 1;
                         if paren_count == 0 {
-                            result.shrink_to_fit();
-                            return Ok((result, s));
+                            content.shrink_to_fit();
+                            return Ok((
+                                Input {
+                                    content,
+                                    opening_paren_pos,
+                                },
+                                s,
+                            ));
                         }
-                        result.push(')');
+                        content.push(')');
                     }
                     '\\' => match next(s) {
                         Some((c, new_s)) => {
-                            result.push('\\');
-                            result.push(c);
+                            content.push('\\');
+                            content.push(c);
                             s = new_s;
                         }
                         None => {
-                            return Err(Some(Error::NothingAfterEscapeCharacter {
-                                escape_character_index: str_at_current_char.index,
-                            }))
+                            return Err(Some(Error::NothingAfterEscapeCharacter { esc_char_pos }))
                         }
                     },
-                    _ => result.push(c),
+                    _ => content.push(c),
                 }
             }
-            None => {
-                return Err(Some(Error::MissingClosingParen {
-                    index: str_at_beginning.index,
-                }))
-            }
+            None => return Err(Some(Error::MissingClosingParen { opening_paren_pos })),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct Line {
-    pub command_name: String,
-    pub inputs: Vec<String>,
+pub struct CommandName<'a> {
+    pub beginning_pos: S<'a>,
+    pub content: String,
+}
+
+#[derive(Debug)]
+pub struct Input<'a> {
+    pub opening_paren_pos: S<'a>,
+    pub content: String,
+}
+
+#[derive(Debug)]
+pub struct Line<'a> {
+    pub command_name: CommandName<'a>,
+    pub inputs: Vec<Input<'a>>,
 }
 
 pub fn line(mut s: S) -> Result<(Line, S), Option<Error>> {
-    let str_before_command_name = s;
+    let beginning_pos = s;
     let command_name = match command_name(s) {
         None => match next(s) {
             None => return Err(None),
             Some((c, _s)) => {
                 if c == '(' {
                     return Err(Some(Error::InputWithoutCommandName {
-                        index: str_before_command_name.index,
+                        opening_paren_pos: beginning_pos,
                     }));
                 } else if c == ';' {
                     return Err(None);
                 } else {
                     return Err(Some(Error::UnexpectedClosingParen {
-                        index: str_before_command_name.index,
+                        closing_paren_pos: beginning_pos,
                     }));
                 }
             }
         },
-        Some((fname, new_s)) => {
+        Some((command_name, new_s)) => {
             s = new_s;
-            fname
+            command_name
         }
     };
     let mut inputs = Vec::new();
@@ -153,20 +200,19 @@ pub fn line(mut s: S) -> Result<(Line, S), Option<Error>> {
 }
 
 #[derive(Debug)]
-pub struct Program {
-    pub lines: Vec<Line>,
+pub struct Program<'a> {
+    pub lines: Vec<Line<'a>>,
 }
 
 #[derive(Debug)]
-pub enum Error {
-    MissingClosingParen { index: usize },
-    InputWithoutCommandName { index: usize },
-    UnexpectedClosingParen { index: usize },
-    NothingAfterEscapeCharacter { escape_character_index: usize },
+pub enum Error<'a> {
+    MissingClosingParen { opening_paren_pos: S<'a> },
+    InputWithoutCommandName { opening_paren_pos: S<'a> },
+    UnexpectedClosingParen { closing_paren_pos: S<'a> },
+    NothingAfterEscapeCharacter { esc_char_pos: S<'a> },
 }
 
-pub fn program(src: &str) -> Result<Program, Error> {
-    let mut s = S { src, index: 0 };
+pub fn program(mut s: S) -> Result<Program, Error> {
     let mut lines = Vec::new();
     loop {
         s = skip_whitespace(s);
@@ -176,7 +222,9 @@ pub fn program(src: &str) -> Result<Program, Error> {
                 None => return Ok(Program { lines }),
                 Some((c, new_s)) => {
                     if !"\n;".contains(c) {
-                        return Err(Error::UnexpectedClosingParen { index: s.index });
+                        return Err(Error::UnexpectedClosingParen {
+                            closing_paren_pos: s,
+                        });
                     }
                     s = new_s;
                 }

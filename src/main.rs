@@ -1,8 +1,8 @@
 use std::{collections::HashMap, rc::Rc};
 
 mod interpreter;
-mod parser;
 mod objects;
+mod parser;
 
 fn main() {
     fn populate_fn(
@@ -23,11 +23,64 @@ fn main() {
     let mut interpreter = interpreter::Interpreter { names };
 
     let mut editor = rustyline::DefaultEditor::new().unwrap();
-    while let Ok(line) = editor.readline("> ") {
+    let mut buffer: String = String::new();
+    while let Ok(line) = editor.readline(if buffer.is_empty() {
+        "> "
+    } else {
+        "| "
+    }) {
         editor.add_history_entry(&line).unwrap();
-        match parser::program(&line) {
-            Ok(program) => interpreter.interpret(program),
-            Err(e) => println!("{e:?}"),
+        buffer.push_str(&line);
+        match parser::program((&buffer[..]).into()) {
+            Ok(program) => match interpreter.interpret(program) {
+                Ok(obj) => {
+                    if obj.downcast_ref::<objects::Nothing>().is_none() {
+                        println!("{}", obj.to_string());
+                    }
+                }
+                Err(e) => {
+                    use interpreter::Error::*;
+                    let (s, reason) = match e {
+                        CallingANonCommand { opening_paren_pos } => {
+                            (opening_paren_pos, "Calling a non-command")
+                        }
+                        UnknownName { beginning_pos } => (beginning_pos, "Unknown name"),
+                    };
+                    let (row, col, line) = parser::row_col_line(s);
+                    eprintln!("Execution error at row {row}, column {col}: {reason}");
+                    eprintln!("\n{line}");
+                    for _ in 0..col {
+                        eprint!(" ");
+                    }
+                    eprintln!("^\n");
+                }
+            },
+            Err(e) => {
+                use parser::Error::*;
+                let (s, reason) = match e {
+                    MissingClosingParen { .. } => {
+                        buffer.push('\n');
+                        continue;
+                    }
+                    UnexpectedClosingParen { closing_paren_pos } => {
+                        (closing_paren_pos, "Unexpected closing parenthesis")
+                    }
+                    InputWithoutCommandName { opening_paren_pos } => {
+                        (opening_paren_pos, "Input without command name")
+                    }
+                    NothingAfterEscapeCharacter { esc_char_pos } => {
+                        (esc_char_pos, "Nothing after escape character")
+                    }
+                };
+                let (row, col, line) = parser::row_col_line(s);
+                eprintln!("Syntax error at row {row}, column {col}: {reason}");
+                eprintln!("\n{line}");
+                for _ in 0..col {
+                    eprint!(" ");
+                }
+                eprintln!("^\n");
+            }
         }
+        buffer.clear();
     }
 }

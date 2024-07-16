@@ -1,6 +1,9 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{objects, parser::Program};
+use crate::{
+    objects,
+    parser::{Program, S},
+};
 use downcast_rs::{impl_downcast, Downcast};
 
 pub trait Object: Downcast {
@@ -14,25 +17,33 @@ pub struct Interpreter {
     pub names: Scope,
 }
 
+pub enum Error<'a> {
+    UnknownName { beginning_pos: S<'a> },
+    CallingANonCommand { opening_paren_pos: S<'a> },
+}
+
 impl Interpreter {
-    pub fn interpret(&mut self, program: Program) {
-        // TODO: GET RID OF EVERYTHING WITH "TODO", REPLACE IT WITH ERRORS!!!
+    pub fn interpret<'a>(&mut self, program: Program<'a>) -> Result<Rc<dyn Object>, Error<'a>> {
+        let mut last_obj: Rc<dyn Object> = Rc::new(objects::Nothing {});
         for line in program.lines {
-            let mut object = self
+            last_obj = self
                 .names
                 .0
-                .get_mut(&line.command_name)
-                .expect("object does not exist TODO")
+                .get_mut(&line.command_name.content)
+                .ok_or(Error::UnknownName {
+                    beginning_pos: line.command_name.beginning_pos,
+                })?
                 .clone();
             for input in line.inputs {
-                let command: Rc<objects::Command> = object
-                    .downcast_rc()
-                    .unwrap_or_else(|_| panic!("not a command TODO"));
-                object = command.0(input);
-            }
-            if object.downcast_ref::<objects::Nothing>().is_none() {
-                println!("{}", object.to_string());
+                let command: Rc<objects::Command> =
+                    last_obj
+                        .downcast_rc()
+                        .map_err(|_| Error::CallingANonCommand {
+                            opening_paren_pos: input.opening_paren_pos,
+                        })?;
+                last_obj = command.0(input.content);
             }
         }
+        Ok(last_obj)
     }
 }
