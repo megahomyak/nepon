@@ -99,6 +99,7 @@ pub fn input(mut s: S) -> Result<(String, S), Option<Error>> {
     }
 }
 
+#[derive(Debug)]
 pub struct Expression {
     pub command_name: String,
     pub inputs: Vec<String>,
@@ -109,10 +110,18 @@ pub fn expression(mut s: S) -> Result<(Expression, S), Option<Error>> {
     let command_name = match command_name(s) {
         None => match next(s) {
             None => return Err(None),
-            Some(_) => {
-                return Err(Some(Error::InputWithoutCommandName {
-                    index: str_before_command_name.index,
-                }))
+            Some((c, _s)) => {
+                if c == '(' {
+                    return Err(Some(Error::InputWithoutCommandName {
+                        index: str_before_command_name.index,
+                    }));
+                } else if c == ';' {
+                    return Err(None);
+                } else {
+                    return Err(Some(Error::UnexpectedClosingParen {
+                        index: str_before_command_name.index,
+                    }));
+                }
             }
         },
         Some((fname, new_s)) => {
@@ -133,7 +142,7 @@ pub fn expression(mut s: S) -> Result<(Expression, S), Option<Error>> {
                         inputs,
                     },
                     s,
-                ))
+                ));
             }
             Ok((input, new_s)) => {
                 inputs.push(input);
@@ -143,10 +152,12 @@ pub fn expression(mut s: S) -> Result<(Expression, S), Option<Error>> {
     }
 }
 
+#[derive(Debug)]
 pub struct Program {
     pub expressions: Vec<Expression>,
 }
 
+#[derive(Debug)]
 pub enum Error {
     MissingClosingParen { index: usize },
     InputWithoutCommandName { index: usize },
@@ -154,7 +165,8 @@ pub enum Error {
     NothingAfterEscapeCharacter { escape_character_index: usize },
 }
 
-pub fn program(mut s: S) -> Result<Program, Error> {
+pub fn program(src: &str) -> Result<Program, Error> {
+    let mut s = S { src, index: 0 };
     let mut expressions = Vec::new();
     loop {
         s = skip_whitespace(s);
