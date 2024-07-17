@@ -1,5 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
+use crate::interpreter::Interpreter;
+
 mod interpreter;
 mod objects;
 mod parser;
@@ -8,7 +10,7 @@ fn main() {
     fn populate_fn(
         scope: &mut interpreter::Scope,
         n: &str,
-        o: impl Fn(String) -> Rc<dyn interpreter::Object> + 'static,
+        o: impl Fn(String, &mut Interpreter) -> Rc<dyn interpreter::Object> + 'static,
     ) {
         scope
             .0
@@ -16,7 +18,7 @@ fn main() {
     }
 
     let mut names = interpreter::Scope(HashMap::new());
-    populate_fn(&mut names, "print", |input| {
+    populate_fn(&mut names, "print", |input, _interpreter| {
         println!("{}", input);
         Rc::new(objects::Nothing {})
     });

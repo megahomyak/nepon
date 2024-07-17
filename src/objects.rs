@@ -16,12 +16,9 @@ impl Object for Nothing {
     }
 }
 
-pub trait ErrorString {
-    fn to_string(&self) -> String;
-}
-pub struct Error<T>(pub T);
-impl<T: ErrorString + 'static> Object for Error<T> {
+pub struct Error(pub String);
+impl Object for Error {
     fn to_string(&self) -> String {
-        self.0.to_string()
+        self.0.clone()
     }
 }

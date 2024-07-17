@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    objects::{self, ErrorString},
+    objects,
     parser::{self, Program, S},
 };
 use downcast_rs::{impl_downcast, Downcast};
@@ -22,7 +22,7 @@ pub enum Error<'a> {
     CallingANonCommand { opening_paren_pos: S<'a> },
 }
 
-impl<'a> ErrorString for Error<'a> {
+impl Error<'_> {
     fn to_string(&self) -> String {
         let mut output = String::new();
         let (s, reason) = match self {
@@ -36,6 +36,7 @@ impl<'a> ErrorString for Error<'a> {
             "Execution error at row {row}, column {col}: {reason}\n\n"
         ));
         output.push_str(line);
+        output.push('\n');
         for _ in 0..col {
             output.push(' ');
         }
@@ -44,12 +45,12 @@ impl<'a> ErrorString for Error<'a> {
     }
 }
 
-fn err(e: impl ErrorString + 'static) -> Rc<dyn Object> {
-    Rc::new(objects::Error(e))
+fn err(e: Error) -> Rc<dyn Object> {
+    Rc::new(objects::Error(e.to_string()))
 }
 
 impl Interpreter {
-    pub fn interpret<'a>(&mut self, program: Program<'a>) -> Rc<dyn Object + 'a> {
+    pub fn interpret<'a>(&mut self, program: Program<'a>) -> Rc<dyn Object> {
         let mut last_obj: Rc<dyn Object> = Rc::new(objects::Nothing {});
         for line in program.lines {
             last_obj = match self.names.0.get_mut(&line.command_name.content) {
