@@ -32,8 +32,13 @@ fn main() {
         match parser::program((&buffer[..]).into()) {
             Ok(program) => {
                 let obj = interpreter.interpret(program);
-                if obj.downcast_ref::<objects::Nothing>().is_none() {
-                    println!("{}", obj.to_string());
+                match obj.downcast_ref::<objects::Error>() {
+                    Some(objects::Error(e)) => eprintln!("{e}"),
+                    None => {
+                        if obj.downcast_ref::<objects::Nothing>().is_none() {
+                            println!("{}", obj.to_string());
+                        }
+                    }
                 }
             }
             Err(e) => {
