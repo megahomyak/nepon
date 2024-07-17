@@ -15,7 +15,7 @@ mod s {
     pub fn row_col_line<'a>(s: &'a S) -> (usize, usize, &'a str) {
         let mut line_start_idx = 0;
         let mut row = 1;
-        let mut col = 0;
+        let mut col = 1;
         let mut char_indices = s.src.char_indices();
         let mut found = false;
         for (i, c) in &mut char_indices {
@@ -27,7 +27,7 @@ mod s {
                     return (row, col, unsafe { s.src.get_unchecked(line_start_idx..i) });
                 } else {
                     line_start_idx = i;
-                    col = 0;
+                    col = 1;
                     row += 1;
                 }
             } else if !found {
