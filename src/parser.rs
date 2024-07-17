@@ -12,7 +12,7 @@ mod s {
         }
     }
 
-    pub fn row_col_line(s: S) -> (usize, usize, &str) {
+    pub fn row_col_line<'a>(s: &'a S) -> (usize, usize, &'a str) {
         let mut line_start_idx = 0;
         let mut row = 1;
         let mut col = 0;

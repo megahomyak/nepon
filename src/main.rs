@@ -24,37 +24,16 @@ fn main() {
 
     let mut editor = rustyline::DefaultEditor::new().unwrap();
     let mut buffer: String = String::new();
-    while let Ok(line) = editor.readline(if buffer.is_empty() {
-        "> "
-    } else {
-        "| "
-    }) {
+    while let Ok(line) = editor.readline(if buffer.is_empty() { "> " } else { "| " }) {
         editor.add_history_entry(&line).unwrap();
         buffer.push_str(&line);
         match parser::program((&buffer[..]).into()) {
-            Ok(program) => match interpreter.interpret(program) {
-                Ok(obj) => {
-                    if obj.downcast_ref::<objects::Nothing>().is_none() {
-                        println!("{}", obj.to_string());
-                    }
+            Ok(program) => {
+                let obj = interpreter.interpret(program);
+                if obj.downcast_ref::<objects::Nothing>().is_none() {
+                    println!("{}", obj.to_string());
                 }
-                Err(e) => {
-                    use interpreter::Error::*;
-                    let (s, reason) = match e {
-                        CallingANonCommand { opening_paren_pos } => {
-                            (opening_paren_pos, "Calling a non-command")
-                        }
-                        UnknownName { beginning_pos } => (beginning_pos, "Unknown name"),
-                    };
-                    let (row, col, line) = parser::row_col_line(s);
-                    eprintln!("Execution error at row {row}, column {col}: {reason}");
-                    eprintln!("\n{line}");
-                    for _ in 0..col {
-                        eprint!(" ");
-                    }
-                    eprintln!("^\n");
-                }
-            },
+            }
             Err(e) => {
                 use parser::Error::*;
                 let (s, reason) = match e {
@@ -72,7 +51,7 @@ fn main() {
                         (esc_char_pos, "Nothing after escape character")
                     }
                 };
-                let (row, col, line) = parser::row_col_line(s);
+                let (row, col, line) = parser::row_col_line(&s);
                 eprintln!("Syntax error at row {row}, column {col}: {reason}");
                 eprintln!("\n{line}");
                 for _ in 0..col {
