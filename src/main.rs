@@ -61,7 +61,7 @@ fn main() {
                 let (row, col, line) = parser::row_col_line(&s);
                 eprintln!("Syntax error at row {row}, column {col}: {reason}");
                 eprintln!("\n{line}");
-                for _ in 0..col {
+                for _ in 1..col {
                     eprint!(" ");
                 }
                 eprintln!("^\n");

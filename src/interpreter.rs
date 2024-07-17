@@ -37,7 +37,7 @@ impl Error<'_> {
         ));
         output.push_str(line);
         output.push('\n');
-        for _ in 0..col {
+        for _ in 1..col {
             output.push(' ');
         }
         output.push_str("^\n");
